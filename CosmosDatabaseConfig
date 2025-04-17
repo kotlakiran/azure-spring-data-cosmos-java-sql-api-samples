@@ -1,0 +1,60 @@
+package com.kiran.azure.cosmos.spring.examples.config;
+
+import com.azure.cosmos.CosmosClientBuilder;
+import com.azure.spring.data.cosmos.CosmosFactory;
+import com.azure.spring.data.cosmos.config.CosmosConfig;
+import com.azure.spring.data.cosmos.core.CosmosTemplate;
+import com.azure.spring.data.cosmos.core.convert.MappingCosmosConverter;
+import com.azure.spring.data.cosmos.core.mapping.CosmosMappingContext;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class CosmosDatabaseConfig {
+
+
+    @Value("${cosmos.uri}")
+    private String cosmosUri;
+
+    @Value("${cosmos.key}")
+    private String cosmosKey;
+
+    @Value("${cosmos.database.name:sample-db}")
+    private String cosmosDatabaseName;
+
+    @Bean
+    public CosmosFactory cosmosFactory() {
+        return new CosmosFactory(new CosmosClientBuilder()
+            .gatewayMode()
+            .endpoint(cosmosUri)
+            .key(cosmosKey)
+            .buildAsyncClient(),
+            cosmosDatabaseName);
+    }
+
+    @Bean
+    public CosmosConfig cosmosConfig() {
+        return CosmosConfig.builder()
+                .enableQueryMetrics(true)
+                .build();
+    }
+
+    @Bean
+    public CosmosMappingContext cosmosMappingContext() {
+        return new CosmosMappingContext();
+    }
+
+    @Bean
+    public MappingCosmosConverter mappingCosmosConverter(CosmosMappingContext cosmosMappingContext) {
+        ObjectMapper objectMapper = new ObjectMapper();
+        objectMapper.configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        return new MappingCosmosConverter(cosmosMappingContext, objectMapper);
+    }
+
+    @Bean
+    public CosmosTemplate cosmosTemplate(CosmosFactory cosmosFactory, CosmosConfig cosmosConfig, MappingCosmosConverter mappingCosmosConverter) {
+        return new CosmosTemplate(cosmosFactory, cosmosConfig, mappingCosmosConverter);
+    }
+}
