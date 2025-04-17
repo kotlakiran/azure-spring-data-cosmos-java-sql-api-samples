@@ -1,0 +1,75 @@
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+
+public class CertificateManager {
+
+    private static final String JAVA_KEYSTORE_PATH = System.getProperty("java.home") + "/lib/security/cacerts";
+    private static final String KEYSTORE_PASSWORD = "changeit";
+
+    public static void importCertificates() {
+        try {
+            String containerId = getLatestContainerId();
+            copyCertificatesFromContainer(containerId);
+            importCertificate("domain.crt", "cosmos-emulator-domain");
+            importCertificate("rootCA.crt", "cosmos-emulator-rootCA");
+            System.out.println("Certificates imported successfully.");
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to import certificates", e);
+        }
+    }
+
+    private static String getLatestContainerId() throws Exception {
+        return executeCommand("docker ps --all --quiet --latest").trim();
+    }
+
+    private static void copyCertificatesFromContainer(String containerId) throws Exception {
+        executeCommand("docker cp " + containerId + ":/scripts/certs/domain.crt .");
+        executeCommand("docker cp " + containerId + ":/scripts/certs/rootCA.crt .");
+    }
+
+    private static void importCertificate(String certFile, String alias) throws Exception {
+        if (isAliasExists(alias)) {
+            return;
+        }
+        String command = String.format(
+            "keytool -import -trustcacerts -file %s -alias %s -keystore %s -storepass %s -noprompt",
+            certFile, alias, JAVA_KEYSTORE_PATH, KEYSTORE_PASSWORD
+        );
+        executeCommand(command);
+    }
+
+    private static boolean isAliasExists(String alias) throws Exception {
+        String command = String.format(
+            "keytool -list -keystore %s -storepass %s -alias %s",
+            JAVA_KEYSTORE_PATH, KEYSTORE_PASSWORD, alias
+        );
+        try {
+            executeCommand(command);
+            return true;
+        } catch (RuntimeException e) {
+            if (e.getMessage().contains("Alias <" + alias + "> does not exist")) {
+                return false;
+            }
+            throw e;
+        }
+    }
+
+    private static String executeCommand(String command) throws Exception {
+        ProcessBuilder processBuilder = new ProcessBuilder(command.split(" "));
+        processBuilder.redirectErrorStream(true);
+        Process process = processBuilder.start();
+
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+            StringBuilder output = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                output.append(line).append(System.lineSeparator());
+            }
+            process.waitFor();
+            if (process.exitValue() != 0) {
+                throw new RuntimeException("Command failed: " + command + "\n" + output);
+            }
+            return output.toString();
+        }
+    }
+}
